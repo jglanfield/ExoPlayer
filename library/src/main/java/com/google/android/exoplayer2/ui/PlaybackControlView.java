@@ -15,11 +15,11 @@
  */
 package com.google.android.exoplayer2.ui;
 
-import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.os.SystemClock;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -54,7 +54,7 @@ public class PlaybackControlView extends FrameLayout {
   }
 
   public static final int DEFAULT_FAST_FORWARD_MS = 15000;
-  public static final int DEFAULT_REWIND_MS = 5000;
+  public static final int DEFAULT_REWIND_MS = 5000;//15000;
   public static final int DEFAULT_SHOW_TIMEOUT_MS = 5000;
 
   private static final int PROGRESS_BAR_MAX = 1000;
@@ -76,7 +76,6 @@ public class PlaybackControlView extends FrameLayout {
   private ExoPlayer player;
   private VisibilityListener visibilityListener;
 
-  private boolean isAttachedToWindow;
   private boolean dragging;
   private int rewindMs;
   private int fastForwardMs;
@@ -113,11 +112,11 @@ public class PlaybackControlView extends FrameLayout {
     showTimeoutMs = DEFAULT_SHOW_TIMEOUT_MS;
     if (attrs != null) {
       TypedArray a = context.getTheme().obtainStyledAttributes(attrs,
-          R.styleable.PlaybackControlView, 0, 0);
+              R.styleable.PlaybackControlView, 0, 0);
       try {
         rewindMs = a.getInt(R.styleable.PlaybackControlView_rewind_increment, rewindMs);
         fastForwardMs = a.getInt(R.styleable.PlaybackControlView_fastforward_increment,
-            fastForwardMs);
+                fastForwardMs);
         showTimeoutMs = a.getInt(R.styleable.PlaybackControlView_show_timeout, showTimeoutMs);
       } finally {
         a.recycle();
@@ -244,15 +243,15 @@ public class PlaybackControlView extends FrameLayout {
    * Hides the controller.
    */
   public void hide() {
-    if (isVisible()) {
-      setVisibility(GONE);
-      if (visibilityListener != null) {
-        visibilityListener.onVisibilityChange(getVisibility());
-      }
-      removeCallbacks(updateProgressAction);
-      removeCallbacks(hideAction);
-      hideAtMs = C.TIME_UNSET;
-    }
+//    if (isVisible()) {
+//      setVisibility(GONE);
+//      if (visibilityListener != null) {
+//        visibilityListener.onVisibilityChange(getVisibility());
+//      }
+//      removeCallbacks(updateProgressAction);
+//      removeCallbacks(hideAction);
+//      hideAtMs = C.TIME_UNSET;
+//    }
   }
 
   /**
@@ -266,7 +265,7 @@ public class PlaybackControlView extends FrameLayout {
     removeCallbacks(hideAction);
     if (showTimeoutMs > 0) {
       hideAtMs = SystemClock.uptimeMillis() + showTimeoutMs;
-      if (isAttachedToWindow) {
+      if (isAttachedToWindow()) {
         postDelayed(hideAction, showTimeoutMs);
       }
     } else {
@@ -281,19 +280,19 @@ public class PlaybackControlView extends FrameLayout {
   }
 
   private void updatePlayPauseButton() {
-    if (!isVisible() || !isAttachedToWindow) {
+    if (!isVisible() || !isAttachedToWindow()) {
       return;
     }
     boolean playing = player != null && player.getPlayWhenReady();
     String contentDescription = getResources().getString(
-        playing ? R.string.exo_controls_pause_description : R.string.exo_controls_play_description);
+            playing ? R.string.exo_controls_pause_description : R.string.exo_controls_play_description);
     playButton.setContentDescription(contentDescription);
     playButton.setImageResource(
-        playing ? R.drawable.exo_controls_pause : R.drawable.exo_controls_play);
+            playing ? R.drawable.exo_controls_pause : R.drawable.exo_controls_play);
   }
 
   private void updateNavigation() {
-    if (!isVisible() || !isAttachedToWindow) {
+    if (!isVisible() || !isAttachedToWindow()) {
       return;
     }
     Timeline currentTimeline = player != null ? player.getCurrentTimeline() : null;
@@ -307,7 +306,7 @@ public class PlaybackControlView extends FrameLayout {
       isSeekable = currentWindow.isSeekable;
       enablePrevious = currentWindowIndex > 0 || isSeekable || !currentWindow.isDynamic;
       enableNext = (currentWindowIndex < currentTimeline.getWindowCount() - 1)
-          || currentWindow.isDynamic;
+              || currentWindow.isDynamic;
     }
     setButtonEnabled(enablePrevious , previousButton);
     setButtonEnabled(enableNext, nextButton);
@@ -317,11 +316,12 @@ public class PlaybackControlView extends FrameLayout {
   }
 
   private void updateProgress() {
-    if (!isVisible() || !isAttachedToWindow) {
+    if (!isVisible() || !isAttachedToWindow()) {
       return;
     }
     long duration = player == null ? 0 : player.getDuration();
     long position = player == null ? 0 : player.getCurrentPosition();
+    Log.d("Joel", "Player time: " + position);
     time.setText(stringForTime(duration));
     if (!dragging) {
       timeCurrent.setText(stringForTime(position));
@@ -352,16 +352,11 @@ public class PlaybackControlView extends FrameLayout {
   private void setButtonEnabled(boolean enabled, View view) {
     view.setEnabled(enabled);
     if (Util.SDK_INT >= 11) {
-      setViewAlphaV11(view, enabled ? 1f : 0.3f);
+      view.setAlpha(enabled ? 1f : 0.3f);
       view.setVisibility(VISIBLE);
     } else {
       view.setVisibility(enabled ? VISIBLE : INVISIBLE);
     }
-  }
-
-  @TargetApi(11)
-  private void setViewAlphaV11(View view, float alpha) {
-    view.setAlpha(alpha);
   }
 
   private String stringForTime(long timeMs) {
@@ -374,13 +369,13 @@ public class PlaybackControlView extends FrameLayout {
     long hours = totalSeconds / 3600;
     formatBuilder.setLength(0);
     return hours > 0 ? formatter.format("%d:%02d:%02d", hours, minutes, seconds).toString()
-        : formatter.format("%02d:%02d", minutes, seconds).toString();
+            : formatter.format("%02d:%02d", minutes, seconds).toString();
   }
 
   private int progressBarValue(long position) {
     long duration = player == null ? C.TIME_UNSET : player.getDuration();
     return duration == C.TIME_UNSET || duration == 0 ? 0
-        : (int) ((position * PROGRESS_BAR_MAX) / duration);
+            : (int) ((position * PROGRESS_BAR_MAX) / duration);
   }
 
   private long positionValue(int progress) {
@@ -396,7 +391,7 @@ public class PlaybackControlView extends FrameLayout {
     int currentWindowIndex = player.getCurrentWindowIndex();
     currentTimeline.getWindow(currentWindowIndex, currentWindow);
     if (currentWindowIndex > 0 && (player.getCurrentPosition() <= MAX_POSITION_FOR_SEEK_TO_PREVIOUS
-        || (currentWindow.isDynamic && !currentWindow.isSeekable))) {
+            || (currentWindow.isDynamic && !currentWindow.isSeekable))) {
       player.seekToDefaultPosition(currentWindowIndex - 1);
     } else {
       player.seekTo(0);
@@ -420,7 +415,11 @@ public class PlaybackControlView extends FrameLayout {
     if (rewindMs <= 0) {
       return;
     }
+
+    Log.d("Joel", "Player duration: " + player.getDuration());
+    Log.d("Joel", "Position before rewind: " + player.getCurrentPosition());
     player.seekTo(Math.max(player.getCurrentPosition() - rewindMs, 0));
+    Log.d("Joel", "Position after rewind: " + player.getCurrentPosition());
   }
 
   private void fastForward() {
@@ -433,7 +432,6 @@ public class PlaybackControlView extends FrameLayout {
   @Override
   public void onAttachedToWindow() {
     super.onAttachedToWindow();
-    isAttachedToWindow = true;
     if (hideAtMs != C.TIME_UNSET) {
       long delayMs = hideAtMs - SystemClock.uptimeMillis();
       if (delayMs <= 0) {
@@ -448,7 +446,6 @@ public class PlaybackControlView extends FrameLayout {
   @Override
   public void onDetachedFromWindow() {
     super.onDetachedFromWindow();
-    isAttachedToWindow = false;
     removeCallbacks(updateProgressAction);
     removeCallbacks(hideAction);
   }
@@ -490,7 +487,7 @@ public class PlaybackControlView extends FrameLayout {
   }
 
   private final class ComponentListener implements ExoPlayer.EventListener,
-      SeekBar.OnSeekBarChangeListener, OnClickListener {
+          SeekBar.OnSeekBarChangeListener, OnClickListener {
 
     @Override
     public void onStartTrackingTouch(SeekBar seekBar) {

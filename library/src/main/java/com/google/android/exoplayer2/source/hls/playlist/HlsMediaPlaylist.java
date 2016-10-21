@@ -15,6 +15,8 @@
  */
 package com.google.android.exoplayer2.source.hls.playlist;
 
+import android.util.Log;
+
 import com.google.android.exoplayer2.C;
 import java.util.List;
 
@@ -43,12 +45,13 @@ public final class HlsMediaPlaylist extends HlsPlaylist {
     }
 
     public Segment(String uri, double durationSecs, int discontinuitySequenceNumber,
-        long startTimeUs, boolean isEncrypted, String encryptionKeyUri, String encryptionIV,
-        long byterangeOffset, long byterangeLength) {
+                   long startTimeUs, boolean isEncrypted, String encryptionKeyUri, String encryptionIV,
+                   long byterangeOffset, long byterangeLength) {
       this.url = uri;
       this.durationSecs = durationSecs;
       this.discontinuitySequenceNumber = discontinuitySequenceNumber;
       this.startTimeUs = startTimeUs;
+      Log.d("Joel", "Segment.startTimeUs: " + startTimeUs);
       this.isEncrypted = isEncrypted;
       this.encryptionKeyUri = encryptionKeyUri;
       this.encryptionIV = encryptionIV;
@@ -59,6 +62,13 @@ public final class HlsMediaPlaylist extends HlsPlaylist {
     @Override
     public int compareTo(Long startTimeUs) {
       return this.startTimeUs > startTimeUs ? 1 : (this.startTimeUs < startTimeUs ? -1 : 0);
+    }
+
+    @Override
+    public String toString() {
+      return "Segment URL: " + this.url;// + "\n" +
+//                "Duration: " + this.durationSecs + "\n" +
+//                "Start time: " + this.startTimeUs;
     }
   }
 
@@ -74,7 +84,7 @@ public final class HlsMediaPlaylist extends HlsPlaylist {
   public final long durationUs;
 
   public HlsMediaPlaylist(String baseUri, int mediaSequence, int targetDurationSecs, int version,
-      boolean live, Segment initializationSegment, List<Segment> segments) {
+                          boolean live, Segment initializationSegment, List<Segment> segments) {
     super(baseUri, HlsPlaylist.TYPE_MEDIA);
     this.mediaSequence = mediaSequence;
     this.targetDurationSecs = targetDurationSecs;

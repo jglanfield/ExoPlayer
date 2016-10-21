@@ -15,6 +15,8 @@
  */
 package com.google.android.exoplayer2.source.hls;
 
+import android.util.Log;
+
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.extractor.DefaultExtractorInput;
 import com.google.android.exoplayer2.extractor.Extractor;
@@ -82,12 +84,12 @@ import java.util.concurrent.atomic.AtomicInteger;
    * @param encryptionIv For AES encryption chunks, the encryption initialization vector.
    */
   public HlsMediaChunk(DataSource dataSource, DataSpec dataSpec, Format trackFormat,
-      int trackSelectionReason, Object trackSelectionData, long startTimeUs, long endTimeUs,
-      int chunkIndex, int discontinuitySequenceNumber, boolean isMasterTimestampSource,
-      TimestampAdjuster timestampAdjuster, Extractor extractor, boolean extractorNeedsInit,
-      boolean shouldSpliceIn, byte[] encryptionKey, byte[] encryptionIv) {
+                       int trackSelectionReason, Object trackSelectionData, long startTimeUs, long endTimeUs,
+                       int chunkIndex, int discontinuitySequenceNumber, boolean isMasterTimestampSource,
+                       TimestampAdjuster timestampAdjuster, Extractor extractor, boolean extractorNeedsInit,
+                       boolean shouldSpliceIn, byte[] encryptionKey, byte[] encryptionIv) {
     super(buildDataSource(dataSource, encryptionKey, encryptionIv), dataSpec, trackFormat,
-        trackSelectionReason, trackSelectionData, startTimeUs, endTimeUs, chunkIndex);
+            trackSelectionReason, trackSelectionData, startTimeUs, endTimeUs, chunkIndex);
     this.discontinuitySequenceNumber = discontinuitySequenceNumber;
     this.isMasterTimestampSource = isMasterTimestampSource;
     this.timestampAdjuster = timestampAdjuster;
@@ -166,8 +168,9 @@ import java.util.concurrent.atomic.AtomicInteger;
       skipLoadedBytes = false;
     }
     try {
+      Log.d("Joel", "downloading mp3: " + loadDataSpec.uri);
       ExtractorInput input = new DefaultExtractorInput(dataSource,
-          loadDataSpec.absoluteStreamPosition, dataSource.open(loadDataSpec));
+              loadDataSpec.absoluteStreamPosition, dataSource.open(loadDataSpec));
       if (skipLoadedBytes) {
         input.skipFully(bytesLoaded);
       }
@@ -176,9 +179,12 @@ import java.util.concurrent.atomic.AtomicInteger;
         if (!isMasterTimestampSource && timestampAdjuster != null) {
           timestampAdjuster.waitUntilInitialized();
         }
+        Log.d("Joel", "... done");
+        Log.d("Joel", "extract mp3...");
         while (result == Extractor.RESULT_CONTINUE && !loadCanceled) {
           result = extractor.read(input, null);
         }
+        Log.d("Joel", "... done extracting");
         long adjustedEndTimeUs = extractorOutput.getLargestQueuedTimestampUs();
         if (adjustedEndTimeUs != Long.MIN_VALUE) {
           this.adjustedEndTimeUs = adjustedEndTimeUs;
@@ -199,7 +205,7 @@ import java.util.concurrent.atomic.AtomicInteger;
    * order to decrypt the loaded data. Else returns the original.
    */
   private static DataSource buildDataSource(DataSource dataSource, byte[] encryptionKey,
-      byte[] encryptionIv) {
+                                            byte[] encryptionIv) {
     if (encryptionKey == null || encryptionIv == null) {
       return dataSource;
     }

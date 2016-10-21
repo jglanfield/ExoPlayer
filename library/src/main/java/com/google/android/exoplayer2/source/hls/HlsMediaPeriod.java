@@ -18,6 +18,8 @@ package com.google.android.exoplayer2.source.hls;
 import android.net.Uri;
 import android.os.Handler;
 import android.text.TextUtils;
+import android.util.Log;
+
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.ParserException;
@@ -49,7 +51,7 @@ import java.util.List;
  * A {@link MediaPeriod} that loads an HLS stream.
  */
 /* package */ final class HlsMediaPeriod implements MediaPeriod,
-    Loader.Callback<ParsingLoadable<HlsPlaylist>>, HlsSampleStreamWrapper.Callback  {
+        Loader.Callback<ParsingLoadable<HlsPlaylist>>, HlsSampleStreamWrapper.Callback  {
 
   private final Uri manifestUri;
   private final DataSource.Factory dataSourceFactory;
@@ -77,9 +79,9 @@ import java.util.List;
   private CompositeSequenceableLoader sequenceableLoader;
 
   public HlsMediaPeriod(Uri manifestUri, DataSource.Factory dataSourceFactory,
-      int minLoadableRetryCount, EventDispatcher eventDispatcher,
-      MediaSource.Listener sourceListener, Allocator allocator,
-      long positionUs) {
+                        int minLoadableRetryCount, EventDispatcher eventDispatcher,
+                        MediaSource.Listener sourceListener, Allocator allocator,
+                        long positionUs) {
     this.manifestUri = manifestUri;
     this.dataSourceFactory = dataSourceFactory;
     this.minLoadableRetryCount = minLoadableRetryCount;
@@ -114,7 +116,7 @@ import java.util.List;
   public void prepare(Callback callback) {
     this.callback = callback;
     ParsingLoadable<HlsPlaylist> loadable = new ParsingLoadable<>(
-        dataSourceFactory.createDataSource(), manifestUri, C.DATA_TYPE_MANIFEST, manifestParser);
+            dataSourceFactory.createDataSource(), manifestUri, C.DATA_TYPE_MANIFEST, manifestParser);
     long elapsedRealtimeMs = manifestFetcher.startLoading(loadable, this, minLoadableRetryCount);
     eventDispatcher.loadStarted(loadable.dataSpec, loadable.type, elapsedRealtimeMs);
   }
@@ -137,13 +139,13 @@ import java.util.List;
 
   @Override
   public long selectTracks(TrackSelection[] selections, boolean[] mayRetainStreamFlags,
-      SampleStream[] streams, boolean[] streamResetFlags, long positionUs) {
+                           SampleStream[] streams, boolean[] streamResetFlags, long positionUs) {
     // Map each selection and stream onto a child period index.
     int[] streamChildIndices = new int[selections.length];
     int[] selectionChildIndices = new int[selections.length];
     for (int i = 0; i < selections.length; i++) {
       streamChildIndices[i] = streams[i] == null ? C.INDEX_UNSET
-          : streamWrapperIndices.get(streams[i]);
+              : streamWrapperIndices.get(streams[i]);
       selectionChildIndices[i] = C.INDEX_UNSET;
       if (selections[i] != null) {
         TrackGroup trackGroup = selections[i].getTrackGroup();
@@ -162,14 +164,14 @@ import java.util.List;
     SampleStream[] childStreams = new SampleStream[selections.length];
     TrackSelection[] childSelections = new TrackSelection[selections.length];
     ArrayList<HlsSampleStreamWrapper> enabledSampleStreamWrapperList = new ArrayList<>(
-        sampleStreamWrappers.length);
+            sampleStreamWrappers.length);
     for (int i = 0; i < sampleStreamWrappers.length; i++) {
       for (int j = 0; j < selections.length; j++) {
         childStreams[j] = streamChildIndices[j] == i ? streams[j] : null;
         childSelections[j] = selectionChildIndices[j] == i ? selections[j] : null;
       }
       selectedNewTracks |= sampleStreamWrappers[i].selectTracks(childSelections,
-          mayRetainStreamFlags, childStreams, streamResetFlags, !seenFirstTrackSelection);
+              mayRetainStreamFlags, childStreams, streamResetFlags, !seenFirstTrackSelection);
       boolean wrapperEnabled = false;
       for (int j = 0; j < selections.length; j++) {
         if (selectionChildIndices[j] == i) {
@@ -235,8 +237,9 @@ import java.util.List;
 
   @Override
   public long seekToUs(long positionUs) {
+    Log.d("Joel", "seekTo: " + positionUs);
     // Treat all seeks into non-seekable media as being to t=0.
-    positionUs = isLive ? 0 : positionUs;
+    //positionUs = /*isLive ? 0 :*/ positionUs;
     timestampAdjusterProvider.reset();
     for (HlsSampleStreamWrapper sampleStreamWrapper : enabledSampleStreamWrappers) {
       sampleStreamWrapper.seekTo(positionUs);
@@ -248,26 +251,26 @@ import java.util.List;
 
   @Override
   public void onLoadCompleted(ParsingLoadable<HlsPlaylist> loadable, long elapsedRealtimeMs,
-      long loadDurationMs) {
+                              long loadDurationMs) {
     eventDispatcher.loadCompleted(loadable.dataSpec, loadable.type, elapsedRealtimeMs,
-        loadDurationMs, loadable.bytesLoaded());
+            loadDurationMs, loadable.bytesLoaded());
     playlist = loadable.getResult();
     buildAndPrepareSampleStreamWrappers();
   }
 
   @Override
   public void onLoadCanceled(ParsingLoadable<HlsPlaylist> loadable, long elapsedRealtimeMs,
-      long loadDurationMs, boolean released) {
+                             long loadDurationMs, boolean released) {
     eventDispatcher.loadCompleted(loadable.dataSpec, loadable.type, elapsedRealtimeMs,
-        loadDurationMs, loadable.bytesLoaded());
+            loadDurationMs, loadable.bytesLoaded());
   }
 
   @Override
   public int onLoadError(ParsingLoadable<HlsPlaylist> loadable, long elapsedRealtimeMs,
-      long loadDurationMs, IOException error) {
+                         long loadDurationMs, IOException error) {
     boolean isFatal = error instanceof ParserException;
     eventDispatcher.loadError(loadable.dataSpec, loadable.type, elapsedRealtimeMs, loadDurationMs,
-        loadable.bytesLoaded(), error, isFatal);
+            loadable.bytesLoaded(), error, isFatal);
     return isFatal ? Loader.DONT_RETRY_FATAL : Loader.RETRY;
   }
 
@@ -299,13 +302,13 @@ import java.util.List;
     callback.onPrepared(this);
 
     // TODO[playlists]: Calculate the window.
-    Timeline timeline = new SinglePeriodTimeline(durationUs, durationUs, 0, 0, !isLive, isLive);
+    Timeline timeline = new SinglePeriodTimeline(durationUs, durationUs, 0, 0, /*!isLive*/true, isLive);
     sourceListener.onSourceInfoRefreshed(timeline, playlist);
   }
 
   @Override
   public void onContinueLoadingRequiredInMs(final HlsSampleStreamWrapper sampleStreamWrapper,
-      long delayMs) {
+                                            long delayMs) {
     continueLoadingHandler.postDelayed(continueLoadingRunnable, delayMs);
   }
 
@@ -324,9 +327,9 @@ import java.util.List;
     String baseUri = playlist.baseUri;
     if (playlist instanceof HlsMediaPlaylist) {
       HlsMasterPlaylist.HlsUrl[] variants = new HlsMasterPlaylist.HlsUrl[] {
-          HlsMasterPlaylist.HlsUrl.createMediaPlaylistHlsUrl(playlist.baseUri)};
+              HlsMasterPlaylist.HlsUrl.createMediaPlaylistHlsUrl(playlist.baseUri)};
       sampleStreamWrappers = new HlsSampleStreamWrapper[] {
-          buildSampleStreamWrapper(C.TRACK_TYPE_DEFAULT, baseUri, variants, null, null)};
+              buildSampleStreamWrapper(C.TRACK_TYPE_DEFAULT, baseUri, variants, null, null)};
       pendingPrepareCount = 1;
       sampleStreamWrappers[0].continuePreparing();
       return;
@@ -361,14 +364,14 @@ import java.util.List;
     List<HlsMasterPlaylist.HlsUrl> audioVariants = masterPlaylist.audios;
     List<HlsMasterPlaylist.HlsUrl> subtitleVariants = masterPlaylist.subtitles;
     sampleStreamWrappers = new HlsSampleStreamWrapper[(selectedVariants.isEmpty() ? 0 : 1)
-        + audioVariants.size() + subtitleVariants.size()];
+            + audioVariants.size() + subtitleVariants.size()];
     int currentWrapperIndex = 0;
     pendingPrepareCount = sampleStreamWrappers.length;
     if (!selectedVariants.isEmpty()) {
       HlsMasterPlaylist.HlsUrl[] variants = new HlsMasterPlaylist.HlsUrl[selectedVariants.size()];
       selectedVariants.toArray(variants);
       HlsSampleStreamWrapper sampleStreamWrapper = buildSampleStreamWrapper(C.TRACK_TYPE_DEFAULT,
-          baseUri, variants, masterPlaylist.muxedAudioFormat, masterPlaylist.muxedCaptionFormat);
+              baseUri, variants, masterPlaylist.muxedAudioFormat, masterPlaylist.muxedCaptionFormat);
       sampleStreamWrappers[currentWrapperIndex++] = sampleStreamWrapper;
       sampleStreamWrapper.continuePreparing();
     }
@@ -376,7 +379,7 @@ import java.util.List;
     // Build audio stream wrappers.
     for (int i = 0; i < audioVariants.size(); i++) {
       HlsSampleStreamWrapper sampleStreamWrapper = buildSampleStreamWrapper(C.TRACK_TYPE_AUDIO,
-          baseUri, new HlsMasterPlaylist.HlsUrl[] {audioVariants.get(i)}, null, null);
+              baseUri, new HlsMasterPlaylist.HlsUrl[] {audioVariants.get(i)}, null, null);
       sampleStreamWrappers[currentWrapperIndex++] = sampleStreamWrapper;
       sampleStreamWrapper.continuePreparing();
     }
@@ -385,24 +388,24 @@ import java.util.List;
     for (int i = 0; i < subtitleVariants.size(); i++) {
       HlsMasterPlaylist.HlsUrl url = subtitleVariants.get(i);
       HlsSampleStreamWrapper sampleStreamWrapper = buildSampleStreamWrapper(C.TRACK_TYPE_TEXT,
-          baseUri, new HlsMasterPlaylist.HlsUrl[] {url}, null, null);
+              baseUri, new HlsMasterPlaylist.HlsUrl[] {url}, null, null);
       sampleStreamWrapper.prepareSingleTrack(url.format);
       sampleStreamWrappers[currentWrapperIndex++] = sampleStreamWrapper;
     }
   }
 
   private HlsSampleStreamWrapper buildSampleStreamWrapper(int trackType, String baseUri,
-      HlsMasterPlaylist.HlsUrl[] variants, Format muxedAudioFormat, Format muxedCaptionFormat) {
+                                                          HlsMasterPlaylist.HlsUrl[] variants, Format muxedAudioFormat, Format muxedCaptionFormat) {
     DataSource dataSource = dataSourceFactory.createDataSource();
     HlsChunkSource defaultChunkSource = new HlsChunkSource(baseUri, variants, dataSource,
-        timestampAdjusterProvider);
+            timestampAdjusterProvider);
     return new HlsSampleStreamWrapper(trackType, this, defaultChunkSource, allocator,
-        preparePositionUs, muxedAudioFormat, muxedCaptionFormat, minLoadableRetryCount,
-        eventDispatcher);
+            preparePositionUs, muxedAudioFormat, muxedCaptionFormat, minLoadableRetryCount,
+            eventDispatcher);
   }
 
   private static boolean variantHasExplicitCodecWithPrefix(HlsMasterPlaylist.HlsUrl variant,
-      String prefix) {
+                                                           String prefix) {
     String codecs = variant.format.codecs;
     if (TextUtils.isEmpty(codecs)) {
       return false;

@@ -18,6 +18,8 @@ package com.google.android.exoplayer2.source.hls;
 import android.net.Uri;
 import android.os.SystemClock;
 import android.text.TextUtils;
+import android.util.Log;
+
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.extractor.Extractor;
@@ -141,7 +143,7 @@ import java.util.Locale;
    *     same provider.
    */
   public HlsChunkSource(String baseUri, HlsMasterPlaylist.HlsUrl[] variants, DataSource dataSource,
-      TimestampAdjusterProvider timestampAdjusterProvider) {
+                        TimestampAdjusterProvider timestampAdjusterProvider) {
     this.baseUri = baseUri;
     this.variants = variants;
     this.dataSource = dataSource;
@@ -209,6 +211,8 @@ import java.util.Locale;
     fatalError = null;
   }
 
+  private boolean alreadyGotFirstChunk = false;
+
   /**
    * Returns the next chunk to load.
    * <p>
@@ -225,12 +229,14 @@ import java.util.Locale;
    */
   public void getNextChunk(HlsMediaChunk previous, long playbackPositionUs, HlsChunkHolder out) {
     int oldVariantIndex = previous == null ? C.INDEX_UNSET
-        : trackGroup.indexOf(previous.trackFormat);
+            : trackGroup.indexOf(previous.trackFormat);
+
+//    Log.d("Joel", "getNextChunk() - playbackPositionUs: " + playbackPositionUs);
 
     // Use start time of the previous chunk rather than its end time because switching format will
     // require downloading overlapping segments.
     long bufferedDurationUs = previous == null ? 0
-        : Math.max(0, previous.getAdjustedStartTimeUs() - playbackPositionUs);
+            : Math.max(0, previous.getAdjustedStartTimeUs() - playbackPositionUs);
     trackSelection.updateSelectedTrack(bufferedDurationUs);
     int newVariantIndex = trackSelection.getSelectedIndexInTrackGroup();
 
@@ -239,30 +245,40 @@ import java.util.Locale;
     if (mediaPlaylist == null) {
       // We don't have the media playlist for the next variant. Request it now.
       out.chunk = newMediaPlaylistChunk(newVariantIndex, trackSelection.getSelectionReason(),
-          trackSelection.getSelectionData());
+              trackSelection.getSelectionData());
       return;
     }
 
     int chunkMediaSequence;
     if (live) {
+
+      // if previous == null, then we're either playing the stream for the first time or
+      // we've seeked to the beginning of the playlist. In the first case, we just want to play
+      // the 3rd segment from the live edge; in the latter, we want to play the first segment in
+      // the playlist.
       if (previous == null) {
         // When playing a live stream, the starting chunk will be the third counting from the live
         // edge.
-        chunkMediaSequence = Math.max(0, mediaPlaylist.segments.size() - 3)
-            + mediaPlaylist.mediaSequence;
-        // TODO: Bring this back for live window seeking.
-        // chunkMediaSequence = Util.binarySearchFloor(mediaPlaylist.segments, playbackPositionUs,
-        //     true, true) + mediaPlaylist.mediaSequence;
+        Log.d("Joel", "getNextChunk() - playbackPositionUs: " + playbackPositionUs);
+        if (!alreadyGotFirstChunk && playbackPositionUs <= 0) {
+          chunkMediaSequence = Math.max(0, mediaPlaylist.segments.size() - 3) + mediaPlaylist.mediaSequence;
+          alreadyGotFirstChunk = true;
+        } else {
+          // TODO: Bring this back for live window seeking.
+          chunkMediaSequence = Util.binarySearchFloor(mediaPlaylist.segments, playbackPositionUs, true, true) + mediaPlaylist.mediaSequence;
+        }
+        Log.d("Joel", "chunkMediaSequence: " + chunkMediaSequence);
+        Log.d("Joel", "mediaPlaylist.segments.size: " + mediaPlaylist.segments.size());
       } else {
         chunkMediaSequence = getLiveNextChunkSequenceNumber(previous.chunkIndex, oldVariantIndex,
-            newVariantIndex);
+                newVariantIndex);
         if (chunkMediaSequence < mediaPlaylist.mediaSequence) {
           // We try getting the next chunk without adapting in case that's the reason for falling
           // behind the live window.
           newVariantIndex = oldVariantIndex;
           mediaPlaylist = variantPlaylists[newVariantIndex];
           chunkMediaSequence = getLiveNextChunkSequenceNumber(previous.chunkIndex, oldVariantIndex,
-              newVariantIndex);
+                  newVariantIndex);
           if (chunkMediaSequence < mediaPlaylist.mediaSequence) {
             fatalError = new BehindLiveWindowException();
             return;
@@ -273,10 +289,10 @@ import java.util.Locale;
       // Not live.
       if (previous == null) {
         chunkMediaSequence = Util.binarySearchFloor(mediaPlaylist.segments, playbackPositionUs,
-            true, true) + mediaPlaylist.mediaSequence;
+                true, true) + mediaPlaylist.mediaSequence;
       } else if (switchingVariant) {
         chunkMediaSequence = Util.binarySearchFloor(mediaPlaylist.segments,
-            previous.startTimeUs, true, true) + mediaPlaylist.mediaSequence;
+                previous.startTimeUs, true, true) + mediaPlaylist.mediaSequence;
       } else {
         chunkMediaSequence = previous.getNextChunkIndex();
       }
@@ -290,7 +306,7 @@ import java.util.Locale;
         long msToRerequestLiveMediaPlaylist = msToRerequestLiveMediaPlaylist(newVariantIndex);
         if (msToRerequestLiveMediaPlaylist <= 0) {
           out.chunk = newMediaPlaylistChunk(newVariantIndex,
-              trackSelection.getSelectionReason(), trackSelection.getSelectionData());
+                  trackSelection.getSelectionReason(), trackSelection.getSelectionData());
         } else {
           // 10 milliseconds are added to the wait to make sure the playlist is refreshed when
           // getNextChunk() is called.
@@ -301,6 +317,7 @@ import java.util.Locale;
     }
 
     HlsMediaPlaylist.Segment segment = mediaPlaylist.segments.get(chunkIndex);
+    Log.d("Joel", segment.toString());
 
     // Check if encryption is specified.
     if (segment.isEncrypted) {
@@ -308,7 +325,7 @@ import java.util.Locale;
       if (!keyUri.equals(encryptionKeyUri)) {
         // Encryption is specified and the key has changed.
         out.chunk = newEncryptionKeyChunk(keyUri, segment.encryptionIV, newVariantIndex,
-            trackSelection.getSelectionReason(), trackSelection.getSelectionData());
+                trackSelection.getSelectionReason(), trackSelection.getSelectionData());
         return;
       }
       if (!Util.areEqual(segment.encryptionIV, encryptionIvString)) {
@@ -322,7 +339,7 @@ import java.util.Locale;
     long startTimeUs;
     if (live) {
       if (previous == null) {
-        startTimeUs = 0;
+        startTimeUs = segment.startTimeUs;//0;
       } else if (switchingVariant) {
         startTimeUs = previous.getAdjustedStartTimeUs();
       } else {
@@ -339,10 +356,10 @@ import java.util.Locale;
     // Configure the extractor that will read the chunk.
     Extractor extractor;
     boolean useInitializedExtractor = lastLoadedInitializationChunk != null
-        && lastLoadedInitializationChunk.format == format;
+            && lastLoadedInitializationChunk.format == format;
     boolean needNewExtractor = previous == null
-        || previous.discontinuitySequenceNumber != segment.discontinuitySequenceNumber
-        || format != previous.trackFormat;
+            || previous.discontinuitySequenceNumber != segment.discontinuitySequenceNumber
+            || format != previous.trackFormat;
     boolean extractorNeedsInit = true;
     boolean isTimestampMaster = false;
     TimestampAdjuster timestampAdjuster = null;
@@ -353,14 +370,14 @@ import java.util.Locale;
       // case below.
       extractor = new AdtsExtractor(startTimeUs);
     } else if (lastPathSegment.endsWith(AC3_FILE_EXTENSION)
-        || lastPathSegment.endsWith(EC3_FILE_EXTENSION)) {
+            || lastPathSegment.endsWith(EC3_FILE_EXTENSION)) {
       extractor = new Ac3Extractor(startTimeUs);
     } else if (lastPathSegment.endsWith(MP3_FILE_EXTENSION)) {
       extractor = new Mp3Extractor(startTimeUs);
     } else if (lastPathSegment.endsWith(WEBVTT_FILE_EXTENSION)
-        || lastPathSegment.endsWith(VTT_FILE_EXTENSION)) {
+            || lastPathSegment.endsWith(VTT_FILE_EXTENSION)) {
       timestampAdjuster = timestampAdjusterProvider.getAdjuster(segment.discontinuitySequenceNumber,
-          startTimeUs);
+              startTimeUs);
       extractor = new WebvttExtractor(format.language, timestampAdjuster);
     } else if (lastPathSegment.endsWith(MP4_FILE_EXTENSION)) {
       isTimestampMaster = true;
@@ -369,7 +386,7 @@ import java.util.Locale;
           extractor = lastLoadedInitializationChunk.extractor;
         } else {
           timestampAdjuster = timestampAdjusterProvider.getAdjuster(
-              segment.discontinuitySequenceNumber, startTimeUs);
+                  segment.discontinuitySequenceNumber, startTimeUs);
           extractor = new FragmentedMp4Extractor(0, timestampAdjuster);
         }
       } else {
@@ -382,7 +399,7 @@ import java.util.Locale;
         extractor = lastLoadedInitializationChunk.extractor;
       } else {
         timestampAdjuster = timestampAdjusterProvider.getAdjuster(
-            segment.discontinuitySequenceNumber, startTimeUs);
+                segment.discontinuitySequenceNumber, startTimeUs);
         // This flag ensures the change of pid between streams does not affect the sample queues.
         @DefaultStreamReaderFactory.Flags
         int esReaderFactoryFlags = 0;
@@ -399,7 +416,7 @@ import java.util.Locale;
           }
         }
         extractor = new TsExtractor(timestampAdjuster,
-            new DefaultStreamReaderFactory(esReaderFactoryFlags), true);
+                new DefaultStreamReaderFactory(esReaderFactoryFlags), true);
       }
     } else {
       // MPEG-2 TS segments, and we need to continue using the same extractor.
@@ -408,7 +425,7 @@ import java.util.Locale;
     }
 
     if (needNewExtractor && mediaPlaylist.initializationSegment != null
-        && !useInitializedExtractor) {
+            && !useInitializedExtractor) {
       out.chunk = buildInitializationChunk(mediaPlaylist, extractor, format);
       return;
     }
@@ -416,12 +433,12 @@ import java.util.Locale;
     lastLoadedInitializationChunk = null;
     // Configure the data source and spec for the chunk.
     DataSpec dataSpec = new DataSpec(chunkUri, segment.byterangeOffset, segment.byterangeLength,
-        null);
+            null);
     out.chunk = new HlsMediaChunk(dataSource, dataSpec, format,
-        trackSelection.getSelectionReason(), trackSelection.getSelectionData(),
-        startTimeUs, endTimeUs, chunkMediaSequence, segment.discontinuitySequenceNumber,
-        isTimestampMaster, timestampAdjuster, extractor, extractorNeedsInit, switchingVariant,
-        encryptionKey, encryptionIv);
+            trackSelection.getSelectionReason(), trackSelection.getSelectionData(),
+            startTimeUs, endTimeUs, chunkMediaSequence, segment.discontinuitySequenceNumber,
+            isTimestampMaster, timestampAdjuster, extractor, extractorNeedsInit, switchingVariant,
+            encryptionKey, encryptionIv);
   }
 
   /**
@@ -434,7 +451,7 @@ import java.util.Locale;
    *     corresponds to the given {@code newVariantIndex}.
    */
   private int getLiveNextChunkSequenceNumber(int previousChunkIndex, int oldVariantIndex,
-      int newVariantIndex) {
+                                             int newVariantIndex) {
     if (oldVariantIndex == newVariantIndex) {
       return previousChunkIndex + 1;
     }
@@ -447,10 +464,10 @@ import java.util.Locale;
     }
     long currentTimeMs = SystemClock.elapsedRealtime();
     offsetToLiveInstantSecs +=
-        (double) (currentTimeMs - variantLastPlaylistLoadTimesMs[oldVariantIndex]) / 1000;
+            (double) (currentTimeMs - variantLastPlaylistLoadTimesMs[oldVariantIndex]) / 1000;
     offsetToLiveInstantSecs += LIVE_VARIANT_SWITCH_SAFETY_EXTRA_SECS;
     offsetToLiveInstantSecs -=
-        (double) (currentTimeMs - variantLastPlaylistLoadTimesMs[newVariantIndex]) / 1000;
+            (double) (currentTimeMs - variantLastPlaylistLoadTimesMs[newVariantIndex]) / 1000;
     if (offsetToLiveInstantSecs < 0) {
       // The instant we are looking for is not contained in the playlist, we need it to be
       // refreshed.
@@ -483,7 +500,7 @@ import java.util.Locale;
       EncryptionKeyChunk encryptionKeyChunk = (EncryptionKeyChunk) chunk;
       scratchSpace = encryptionKeyChunk.getDataHolder();
       setEncryptionData(encryptionKeyChunk.dataSpec.uri, encryptionKeyChunk.iv,
-          encryptionKeyChunk.getResult());
+              encryptionKeyChunk.getResult());
     }
   }
 
@@ -498,46 +515,46 @@ import java.util.Locale;
    */
   public boolean onChunkLoadError(Chunk chunk, boolean cancelable, IOException e) {
     return cancelable && ChunkedTrackBlacklistUtil.maybeBlacklistTrack(trackSelection,
-        trackSelection.indexOf(trackGroup.indexOf(chunk.trackFormat)), e);
+            trackSelection.indexOf(trackGroup.indexOf(chunk.trackFormat)), e);
   }
 
   // Private methods.
 
   private HlsInitializationChunk buildInitializationChunk(HlsMediaPlaylist mediaPlaylist,
-      Extractor extractor, Format format) {
+                                                          Extractor extractor, Format format) {
     Segment initSegment = mediaPlaylist.initializationSegment;
     // The initialization segment is required before the actual media chunk.
     Uri initSegmentUri = UriUtil.resolveToUri(mediaPlaylist.baseUri, initSegment.url);
     DataSpec initDataSpec = new DataSpec(initSegmentUri, initSegment.byterangeOffset,
-        initSegment.byterangeLength, null);
+            initSegment.byterangeLength, null);
     return new HlsInitializationChunk(dataSource, initDataSpec,
-        trackSelection.getSelectionReason(), trackSelection.getSelectionData(), extractor,
-        format);
+            trackSelection.getSelectionReason(), trackSelection.getSelectionData(), extractor,
+            format);
   }
 
   private long msToRerequestLiveMediaPlaylist(int variantIndex) {
     HlsMediaPlaylist mediaPlaylist = variantPlaylists[variantIndex];
     long timeSinceLastMediaPlaylistLoadMs =
-        SystemClock.elapsedRealtime() - variantLastPlaylistLoadTimesMs[variantIndex];
+            SystemClock.elapsedRealtime() - variantLastPlaylistLoadTimesMs[variantIndex];
     // Don't re-request media playlist more often than one-half of the target duration.
     return (mediaPlaylist.targetDurationSecs * 1000) / 2 - timeSinceLastMediaPlaylistLoadMs;
   }
 
   private MediaPlaylistChunk newMediaPlaylistChunk(int variantIndex, int trackSelectionReason,
-      Object trackSelectionData) {
+                                                   Object trackSelectionData) {
     Uri mediaPlaylistUri = UriUtil.resolveToUri(baseUri, variants[variantIndex].url);
     DataSpec dataSpec = new DataSpec(mediaPlaylistUri, 0, C.LENGTH_UNSET, null,
-        DataSpec.FLAG_ALLOW_GZIP);
+            DataSpec.FLAG_ALLOW_GZIP);
     return new MediaPlaylistChunk(dataSource, dataSpec, variants[variantIndex].format,
-        trackSelectionReason, trackSelectionData, scratchSpace, playlistParser, variantIndex,
-        mediaPlaylistUri);
+            trackSelectionReason, trackSelectionData, scratchSpace, playlistParser, variantIndex,
+            mediaPlaylistUri);
   }
 
   private EncryptionKeyChunk newEncryptionKeyChunk(Uri keyUri, String iv, int variantIndex,
-      int trackSelectionReason, Object trackSelectionData) {
+                                                   int trackSelectionReason, Object trackSelectionData) {
     DataSpec dataSpec = new DataSpec(keyUri, 0, C.LENGTH_UNSET, null, DataSpec.FLAG_ALLOW_GZIP);
     return new EncryptionKeyChunk(dataSource, dataSpec, variants[variantIndex].format,
-        trackSelectionReason, trackSelectionData, scratchSpace, iv);
+            trackSelectionReason, trackSelectionData, scratchSpace, iv);
   }
 
   private void setEncryptionData(Uri keyUri, String iv, byte[] secretKey) {
@@ -552,7 +569,7 @@ import java.util.Locale;
     byte[] ivDataWithPadding = new byte[16];
     int offset = ivData.length > 16 ? ivData.length - 16 : 0;
     System.arraycopy(ivData, offset, ivDataWithPadding, ivDataWithPadding.length - ivData.length
-        + offset, ivData.length - offset);
+            + offset, ivData.length - offset);
 
     encryptionKeyUri = keyUri;
     encryptionKey = secretKey;
@@ -632,11 +649,11 @@ import java.util.Locale;
     private HlsMediaPlaylist result;
 
     public MediaPlaylistChunk(DataSource dataSource, DataSpec dataSpec, Format trackFormat,
-        int trackSelectionReason, Object trackSelectionData, byte[] scratchSpace,
-        HlsPlaylistParser playlistParser, int variantIndex,
-        Uri playlistUri) {
+                              int trackSelectionReason, Object trackSelectionData, byte[] scratchSpace,
+                              HlsPlaylistParser playlistParser, int variantIndex,
+                              Uri playlistUri) {
       super(dataSource, dataSpec, C.DATA_TYPE_MANIFEST, trackFormat, trackSelectionReason,
-          trackSelectionData, scratchSpace);
+              trackSelectionData, scratchSpace);
       this.variantIndex = variantIndex;
       this.playlistParser = playlistParser;
       this.playlistUri = playlistUri;
@@ -645,7 +662,7 @@ import java.util.Locale;
     @Override
     protected void consume(byte[] data, int limit) throws IOException {
       result = (HlsMediaPlaylist) playlistParser.parse(playlistUri,
-          new ByteArrayInputStream(data, 0, limit));
+              new ByteArrayInputStream(data, 0, limit));
     }
 
     public HlsMediaPlaylist getResult() {
@@ -661,9 +678,9 @@ import java.util.Locale;
     private byte[] result;
 
     public EncryptionKeyChunk(DataSource dataSource, DataSpec dataSpec, Format trackFormat,
-        int trackSelectionReason, Object trackSelectionData, byte[] scratchSpace, String iv) {
+                              int trackSelectionReason, Object trackSelectionData, byte[] scratchSpace, String iv) {
       super(dataSource, dataSpec, C.DATA_TYPE_DRM, trackFormat, trackSelectionReason,
-          trackSelectionData, scratchSpace);
+              trackSelectionData, scratchSpace);
       this.iv = iv;
     }
 
