@@ -54,7 +54,7 @@ public class PlaybackControlView extends FrameLayout {
   }
 
   public static final int DEFAULT_FAST_FORWARD_MS = 15000;
-  public static final int DEFAULT_REWIND_MS = 5000;//15000;
+  public static final int DEFAULT_REWIND_MS = 15000;
   public static final int DEFAULT_SHOW_TIMEOUT_MS = 5000;
 
   private static final int PROGRESS_BAR_MAX = 1000;
